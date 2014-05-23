@@ -1,5 +1,9 @@
+import collections
+
+
 PSEUDO_SELECTORS = (':all', ':pk', ':local', ':related')
 DEFAULT_SELECTORS = (':pk', ':local')
+
 
 def convert_to_camel(s):
     if '_' not in s:
@@ -13,10 +17,10 @@ class ModelFieldResolver(object):
 
     def _get_pk_field(self, model):
         fields = (model._meta.pk,)
-        names = tuple(map(lambda x: x.name, fields))
+        names = tuple([x.name for x in fields])
 
         return {
-            ':pk': dict(zip(names, fields)),
+            ':pk': dict(list(zip(names, fields))),
         }
 
     def _get_local_fields(self, model):
@@ -25,10 +29,10 @@ class ModelFieldResolver(object):
         m2m = model._meta.many_to_many
 
         fields = local + m2m
-        names = tuple(map(lambda x: x.name, fields))
+        names = tuple([x.name for x in fields])
 
         return {
-            ':local': dict(zip(names, fields)),
+            ':local': dict(list(zip(names, fields))),
         }
 
     def _get_related_fields(self, model):
@@ -37,14 +41,14 @@ class ModelFieldResolver(object):
         reverse_m2m = model._meta.get_all_related_many_to_many_objects()
 
         fields = tuple(reverse_fk + reverse_m2m)
-        names = tuple(map(lambda x: x.get_accessor_name(), fields))
+        names = tuple([x.get_accessor_name() for x in fields])
 
         return {
-            ':related': dict(zip(names, fields)),
+            ':related': dict(list(zip(names, fields))),
         }
 
     def _get_fields(self, model):
-        if not self.cache.has_key(model):
+        if model not in self.cache:
             fields = {}
 
             fields.update(self._get_pk_field(model))
@@ -52,7 +56,7 @@ class ModelFieldResolver(object):
             fields.update(self._get_related_fields(model))
 
             all_ = {}
-            for x in fields.values():
+            for x in list(fields.values()):
                 all_.update(x)
 
             fields[':all'] = all_
@@ -66,12 +70,13 @@ class ModelFieldResolver(object):
 
         # Alias to model fields
         if attr in PSEUDO_SELECTORS:
-            return fields[attr].keys()
+            return list(fields[attr].keys())
 
         # Assume a field or property
         return attr
 
 resolver = ModelFieldResolver()
+
 
 def parse_selectors(model, fields=None, exclude=None, key_map=None, **options):
     """Validates fields are valid and maps pseudo-fields to actual fields
@@ -92,7 +97,7 @@ def parse_selectors(model, fields=None, exclude=None, key_map=None, **options):
 
         if cleaned is None:
             raise AttributeError('The "{0}" attribute could not be found '
-                'on the model "{1}"'.format(actual, model))
+                                 'on the model "{1}"'.format(actual, model))
 
         # Mapped value, so use the original name listed in `fields`
         if type(cleaned) is list:
@@ -116,12 +121,12 @@ def get_field_value(obj, name, allow_missing=False):
         raise ValueError('{} has no attribute {}'.format(obj, name))
 
     # Check for callable
-    if callable(value):
+    if isinstance(value, collections.Callable):
         value = value()
 
     # Handle a local many-to-many or a reverse foreign key
     elif value.__class__.__name__ in ('RelatedManager', 'ManyRelatedManager',
-            'GenericRelatedObjectManager'):
+                                      'GenericRelatedObjectManager'):
         value = value.all()
 
     return value
